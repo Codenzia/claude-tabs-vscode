@@ -2,7 +2,7 @@
   "name": "claude-tabs",
   "displayName": "Claude Tabs",
   "description": "Snapshot and restore Claude Code conversation tabs across VSCode restarts and extension updates.",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "publisher": "codenzia",
   "author": {
     "name": "Codenzia",
