@@ -2,6 +2,11 @@
 
 All notable changes to **Claude Tabs** will be documented here.
 
+## [0.1.4] — 2026-05-30
+
+### Added
+- Marketplace icon (orange bookmark on dark slate) and dark gallery banner.
+
 ## [0.1.3] — 2026-05-30
 
 ### Changed
