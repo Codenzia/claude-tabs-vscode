@@ -1,0 +1,191 @@
+{
+  "name": "claude-tabs",
+  "displayName": "Claude Tabs",
+  "description": "Snapshot and restore Claude Code conversation tabs across VSCode restarts and extension updates.",
+  "version": "0.1.2",
+  "publisher": "codenzia",
+  "author": {
+    "name": "Codenzia",
+    "url": "https://codenzia.com"
+  },
+  "license": "MIT",
+  "homepage": "https://codenzia.com",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Codenzia/claude-tabs-vscode"
+  },
+  "bugs": {
+    "url": "https://github.com/Codenzia/claude-tabs-vscode/issues"
+  },
+  "keywords": [
+    "claude",
+    "claude code",
+    "anthropic",
+    "tabs",
+    "session",
+    "snapshot",
+    "codenzia"
+  ],
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "main": "./out/extension.js",
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "claudeTabs.saveSnapshot",
+        "title": "Claude Tabs: Save Snapshot…",
+        "icon": "$(save)"
+      },
+      {
+        "command": "claudeTabs.quickSave",
+        "title": "Claude Tabs: Quick Save (timestamped)",
+        "icon": "$(save-all)"
+      },
+      {
+        "command": "claudeTabs.refresh",
+        "title": "Claude Tabs: Refresh",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "claudeTabs.restoreSnapshot",
+        "title": "Claude Tabs: Restore All Tabs from Snapshot",
+        "icon": "$(history)"
+      },
+      {
+        "command": "claudeTabs.restoreSession",
+        "title": "Claude Tabs: Restore This Tab",
+        "icon": "$(arrow-right)"
+      },
+      {
+        "command": "claudeTabs.renameSnapshot",
+        "title": "Claude Tabs: Rename Snapshot",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "claudeTabs.deleteSnapshot",
+        "title": "Claude Tabs: Delete Snapshot",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "claudeTabs.exportSnapshots",
+        "title": "Claude Tabs: Export Snapshots to JSON…"
+      },
+      {
+        "command": "claudeTabs.importSnapshots",
+        "title": "Claude Tabs: Import Snapshots from JSON…"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "claudeTabs",
+          "title": "Claude Tabs",
+          "icon": "resources/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "claudeTabs": [
+        {
+          "id": "claudeTabs.snapshots",
+          "name": "Snapshots",
+          "icon": "resources/icon.svg",
+          "contextualTitle": "Claude Tabs"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "claudeTabs.snapshots",
+        "contents": "No snapshots yet for this workspace.\n\nSave the Claude Code tabs you have open right now, then restore them any time — even after a VSCode restart or extension update.\n\n[Save current tabs as snapshot](command:claudeTabs.saveSnapshot)\n[Quick save (timestamped)](command:claudeTabs.quickSave)\n\nClaude Tabs is developed by [Codenzia](https://codenzia.com)."
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "claudeTabs.saveSnapshot",
+          "when": "view == claudeTabs.snapshots",
+          "group": "navigation@1"
+        },
+        {
+          "command": "claudeTabs.quickSave",
+          "when": "view == claudeTabs.snapshots",
+          "group": "navigation@2"
+        },
+        {
+          "command": "claudeTabs.refresh",
+          "when": "view == claudeTabs.snapshots",
+          "group": "navigation@3"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "claudeTabs.restoreSnapshot",
+          "when": "view == claudeTabs.snapshots && viewItem == snapshot",
+          "group": "inline@1"
+        },
+        {
+          "command": "claudeTabs.renameSnapshot",
+          "when": "view == claudeTabs.snapshots && viewItem == snapshot",
+          "group": "1_modify@1"
+        },
+        {
+          "command": "claudeTabs.deleteSnapshot",
+          "when": "view == claudeTabs.snapshots && viewItem == snapshot",
+          "group": "1_modify@2"
+        },
+        {
+          "command": "claudeTabs.restoreSession",
+          "when": "view == claudeTabs.snapshots && viewItem == session",
+          "group": "inline@1"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Claude Tabs",
+      "properties": {
+        "claudeTabs.autoSnapshotOnDeactivate": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically take a snapshot when the window is closing (best-effort safety net)."
+        },
+        "claudeTabs.periodicSnapshotMinutes": {
+          "type": "number",
+          "default": 15,
+          "minimum": 0,
+          "description": "Take a periodic auto-snapshot every N minutes. Set to 0 to disable."
+        },
+        "claudeTabs.autoSnapshotKeep": {
+          "type": "number",
+          "default": 10,
+          "minimum": 1,
+          "description": "How many auto-snapshots to keep per workspace before pruning the oldest."
+        },
+        "claudeTabs.restoreDelayMs": {
+          "type": "number",
+          "default": 400,
+          "minimum": 0,
+          "description": "Delay between reopening each tab during restore."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^3.9.1",
+    "typescript": "^5.4.0"
+  }
+}
