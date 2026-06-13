@@ -201,22 +201,32 @@ export function activate(context: vscode.ExtensionContext) {
     })
   );
 
-  const periodicMinutes = cfg().get<number>(SETTING_PERIODIC, 15);
-  if (periodicMinutes > 0 && root) {
-    const handle = setInterval(async () => {
-      try {
-        const tabs = await captureCurrentTabs(root);
-        if (tabs.length === 0) { return; }
-        const name = `Auto — ${new Date().toLocaleString()}`;
-        await store.save(root, name, tabs, true);
-        const keep = cfg().get<number>(SETTING_AUTO_KEEP, 10);
-        await store.pruneAutoSnapshots(root, keep);
-      } catch (err) {
-        console.error('[claude-tabs] periodic snapshot failed', err);
-      }
-    }, periodicMinutes * 60 * 1000);
-    context.subscriptions.push({ dispose: () => clearInterval(handle) });
-  }
+  let periodicHandle: NodeJS.Timeout | undefined;
+  const setupPeriodic = () => {
+    if (periodicHandle) { clearInterval(periodicHandle); periodicHandle = undefined; }
+    const minutes = cfg().get<number>(SETTING_PERIODIC, 15);
+    if (minutes > 0 && root) {
+      periodicHandle = setInterval(async () => {
+        try {
+          const tabs = await captureCurrentTabs(root);
+          if (tabs.length === 0) { return; }
+          const name = `Auto — ${new Date().toLocaleString()}`;
+          await store.save(root, name, tabs, true);
+          const keep = cfg().get<number>(SETTING_AUTO_KEEP, 10);
+          await store.pruneAutoSnapshots(root, keep);
+        } catch (err) {
+          console.error('[claude-tabs] periodic snapshot failed', err);
+        }
+      }, minutes * 60 * 1000);
+    }
+  };
+  setupPeriodic();
+  context.subscriptions.push(
+    vscode.workspace.onDidChangeConfiguration((e) => {
+      if (e.affectsConfiguration(`${CONFIG_NS}.${SETTING_PERIODIC}`)) { setupPeriodic(); }
+    }),
+    { dispose: () => { if (periodicHandle) { clearInterval(periodicHandle); } } }
+  );
 
   (async () => {
     try {

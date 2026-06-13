@@ -24,6 +24,19 @@ function uid(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+function isValidTab(t: any): boolean {
+  return !!t && typeof t.sessionId === 'string' && typeof t.title === 'string';
+}
+function isValidSnapshot(s: any): s is Snapshot {
+  return !!s
+    && typeof s.id === 'string'
+    && typeof s.name === 'string'
+    && typeof s.createdAt === 'number'
+    && typeof s.workspaceFolder === 'string'
+    && Array.isArray(s.tabs)
+    && s.tabs.every(isValidTab);
+}
+
 export class SnapshotStore {
   private readonly _onChange = new vscode.EventEmitter<void>();
   readonly onChange = this._onChange.event;
@@ -89,7 +102,7 @@ export class SnapshotStore {
   }
 
   async pruneAutoSnapshots(workspaceFolder: string, keep: number): Promise<void> {
-    if (keep < 1) { return; }
+    if (keep < 0) { return; }
     const store = this.read();
     const key = normalizeKey(workspaceFolder);
     const arr = store[key] ?? [];
@@ -109,9 +122,10 @@ export class SnapshotStore {
     let added = 0;
     let skipped = 0;
     for (const [key, snaps] of Object.entries(incoming)) {
+      if (!Array.isArray(snaps)) { skipped++; continue; }
       const existing = new Set((store[key] ?? []).map((s) => s.id));
       const fresh = snaps.filter((s) => {
-        if (existing.has(s.id)) { skipped++; return false; }
+        if (!isValidSnapshot(s) || existing.has(s.id)) { skipped++; return false; }
         added++;
         return true;
       });
