@@ -2,6 +2,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import * as readline from 'readline';
+import { readOpenTabsFromStateDb } from './stateDb';
 
 export interface RunningSession {
   sessionId: string;
@@ -158,6 +159,25 @@ function firstUserTextSync(transcriptPath: string, maxBytes = 1024 * 1024): stri
       try { fs.closeSync(fd); } catch { /* ignore */ }
     }
   }
+}
+
+function mergeCaptured(dbTabs: CapturedTab[] | undefined, processTabs: CapturedTab[]): CapturedTab[] {
+  if (!dbTabs || dbTabs.length === 0) { return processTabs; }
+  const seen = new Set(dbTabs.map((t) => t.sessionId));
+  return [...dbTabs, ...processTabs.filter((t) => !seen.has(t.sessionId))];
+}
+
+/**
+ * Captures the full open tab set: the persisted editor layout (includes idle
+ * tabs with no running CLI process, in tab-bar order, with the real tab labels)
+ * merged with live-process sessions the layout has not been flushed with yet.
+ */
+export async function captureAllTabs(workspaceDir: string): Promise<CapturedTab[]> {
+  return mergeCaptured(readOpenTabsFromStateDb(), await captureCurrentTabs(workspaceDir));
+}
+
+export function captureAllTabsSync(workspaceDir: string): CapturedTab[] {
+  return mergeCaptured(readOpenTabsFromStateDb(), captureCurrentTabsSync(workspaceDir));
 }
 
 export function captureCurrentTabsSync(workspaceDir: string): CapturedTab[] {

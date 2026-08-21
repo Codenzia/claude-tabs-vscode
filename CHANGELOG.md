@@ -2,6 +2,15 @@
 
 All notable changes to **Claude Tabs** will be documented here.
 
+## [0.1.5] — 2026-08-21
+
+### Added
+- **Restore Missing Tabs** — compares a snapshot (latest by default, or any snapshot via its context menu) against the tabs currently open and reopens only the gap. No import step, no duplicates.
+- Startup check: after the window finishes restoring, Claude Tabs detects tabs that VSCode dropped (typically after a Claude Code extension update) and offers one-click restore. Disable via `claudeTabs.checkMissingOnStartup`.
+
+### Changed
+- Snapshots now capture the tab set from VSCode's persisted editor layout (`state.vscdb`, read with a vendored sql.js build) merged with live-process scanning. This also captures idle tabs that have no running CLI process — previously the main way tabs escaped snapshots — and preserves custom tab names and tab-bar order.
+
 ## [0.1.4] — 2026-05-30
 
 ### Added

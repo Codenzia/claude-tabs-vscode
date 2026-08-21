@@ -18,6 +18,7 @@ Claude Tabs makes the open tab set a first-class object:
 
 - **Named snapshots** — Save the current tab set under any label (`"before 2.1.158 update"`, `"monday platform work"`)
 - **One-click restore** — Reopens every conversation as a proper Claude Code editor tab, not a terminal session
+- **Restore Missing Tabs** — After an update drops some of your tabs, reopen only the ones that didn't come back — no duplicates. Claude Tabs even detects the gap at startup and offers to fix it
 - **Auto snapshots** — At workspace startup, on a configurable interval, and at shutdown — three layers of safety
 - **Per-workspace** — Each project keeps its own snapshot list; no cross-contamination
 - **Tree view in the Activity Bar** — Browse, expand to see titled tabs inside each snapshot, right-click to restore / rename / delete
@@ -33,12 +34,13 @@ Claude Tabs makes the open tab set a first-class object:
 
 ## How it works
 
-Claude Code persists every conversation under `~/.claude/projects/<workspace>/<sessionId>.jsonl`, and writes a per-process descriptor under `~/.claude/sessions/<pid>.json` while each tab is live. Claude Tabs:
+VSCode persists the editor layout — including every Claude webview tab and its session id — in the workspace's `state.vscdb`. Claude Code additionally writes a per-process descriptor under `~/.claude/sessions/<pid>.json` while a tab's CLI process is live. Claude Tabs:
 
-1. Scans those files for sessions whose `cwd` matches your current workspace and whose process is still alive
-2. Reads the first user message from each transcript to give you a recognizable title
+1. Reads the Claude tab set out of `state.vscdb` (via a bundled sql.js build — this includes idle tabs with no running process, with their real tab names and tab-bar order)
+2. Merges in any live sessions the layout hasn't been flushed with yet, scanning `~/.claude/sessions` and reading transcript first-lines for titles
 3. Stores the resulting `(sessionId, title)` list in VSCode's `globalState`, keyed by workspace folder
 4. On restore, invokes the Claude Code extension's `claude-vscode.primaryEditor.open` command for each saved sessionId
+5. For **Restore Missing Tabs**, diffs the snapshot against the currently open tab labels and live sessions, and opens only what's absent
 
 ## Commands
 
@@ -47,6 +49,7 @@ Claude Code persists every conversation under `~/.claude/projects/<workspace>/<s
 | `Claude Tabs: Save Snapshot…` | Capture current tabs and save with a name you choose |
 | `Claude Tabs: Quick Save (timestamped)` | Same, auto-named with the current time |
 | `Claude Tabs: Restore All Tabs from Snapshot` | Reopen every tab in a snapshot |
+| `Claude Tabs: Restore Missing Tabs` | Reopen only the tabs from the latest snapshot (or a chosen one) that aren't currently open |
 | `Claude Tabs: Restore This Tab` | Reopen a single conversation |
 | `Claude Tabs: Rename Snapshot` | Rename an existing snapshot |
 | `Claude Tabs: Delete Snapshot` | Delete a snapshot |
@@ -60,6 +63,7 @@ Claude Code persists every conversation under `~/.claude/projects/<workspace>/<s
 | `claudeTabs.autoSnapshotOnDeactivate` | `true` | Take an auto-snapshot at startup and at window shutdown |
 | `claudeTabs.periodicSnapshotMinutes` | `15` | Auto-snapshot every N minutes; `0` to disable |
 | `claudeTabs.autoSnapshotKeep` | `10` | How many auto-snapshots to retain per workspace |
+| `claudeTabs.checkMissingOnStartup` | `true` | After the window opens, offer to reopen tabs that VSCode dropped |
 | `claudeTabs.restoreDelayMs` | `400` | Pause between reopening each tab during restore |
 
 ## Requirements

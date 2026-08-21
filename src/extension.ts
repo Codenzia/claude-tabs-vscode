@@ -1,13 +1,15 @@
 import * as vscode from 'vscode';
-import { captureCurrentTabs, captureCurrentTabsSync } from './tabScanner';
+import { CapturedTab, captureAllTabs, captureAllTabsSync, findRunningSessions } from './tabScanner';
 import { Snapshot, SnapshotStore } from './snapshotStore';
 import { SessionNode, SnapshotNode, SnapshotProvider, TreeNode } from './snapshotProvider';
 import { isClaudeCodeInstalled, restoreMany, restoreOne } from './restorer';
+import { initStateDb } from './stateDb';
 
 let deactivateState: { store: SnapshotStore; root: string } | undefined;
 
 const CONFIG_NS = 'claudeTabs';
 const SETTING_AUTO = 'autoSnapshotOnDeactivate';
+const SETTING_CHECK_MISSING = 'checkMissingOnStartup';
 const SETTING_PERIODIC = 'periodicSnapshotMinutes';
 const SETTING_AUTO_KEEP = 'autoSnapshotKeep';
 const SETTING_DELAY = 'restoreDelayMs';
@@ -26,14 +28,33 @@ function updateViewContext(store: SnapshotStore, root: string | undefined) {
   vscode.commands.executeCommand('setContext', STATE_VIEW_HAS_SNAPSHOTS, has);
 }
 
-async function captureWithFeedback(root: string): Promise<ReturnType<typeof captureCurrentTabs> extends Promise<infer T> ? T : never> {
+async function captureWithFeedback(root: string): Promise<CapturedTab[]> {
   return await vscode.window.withProgress(
     { location: vscode.ProgressLocation.Notification, title: 'Claude Tabs: scanning open tabs…', cancellable: false },
-    async () => captureCurrentTabs(root)
+    async () => captureAllTabs(root)
   );
 }
 
-export function activate(context: vscode.ExtensionContext) {
+function openClaudeTabTitles(): Set<string> {
+  const titles = new Set<string>();
+  for (const group of vscode.window.tabGroups.all) {
+    for (const tab of group.tabs) {
+      if (tab.input instanceof vscode.TabInputWebview && tab.input.viewType.includes('claudeVSCodePanel')) {
+        titles.add(tab.label);
+      }
+    }
+  }
+  return titles;
+}
+
+function missingTabs(snap: Snapshot, root: string): CapturedTab[] {
+  const openTitles = openClaudeTabTitles();
+  const liveIds = new Set(findRunningSessions(root).map((s) => s.sessionId));
+  return snap.tabs.filter((t) => !openTitles.has(t.title) && !liveIds.has(t.sessionId));
+}
+
+export async function activate(context: vscode.ExtensionContext) {
+  await initStateDb(context);
   const store = new SnapshotStore(context);
   const root = workspaceRoot();
   const provider = new SnapshotProvider(store, root);
@@ -138,6 +159,41 @@ export function activate(context: vscode.ExtensionContext) {
       );
     }),
 
+    vscode.commands.registerCommand('claudeTabs.restoreMissing', async (node?: SnapshotNode) => {
+      const r = ensureRoot();
+      if (!r) { return; }
+      const snap = node?.snapshot ?? store.list(r)[0];
+      if (!snap) {
+        vscode.window.showInformationMessage('No snapshots yet for this workspace.');
+        return;
+      }
+      if (!(await isClaudeCodeInstalled())) {
+        vscode.window.showErrorMessage('Claude Code extension is not installed. Install it to restore tabs.');
+        return;
+      }
+      const missing = missingTabs(snap, r);
+      if (missing.length === 0) {
+        vscode.window.showInformationMessage(`All ${snap.tabs.length} tabs from "${snap.name}" are already open.`);
+        return;
+      }
+      const delayMs = cfg().get<number>(SETTING_DELAY, 400);
+      await vscode.window.withProgress(
+        {
+          location: vscode.ProgressLocation.Notification,
+          title: `Restoring ${missing.length} missing tab${missing.length === 1 ? '' : 's'} from "${snap.name}"…`,
+          cancellable: true
+        },
+        async (progress, token) => {
+          const result = await restoreMany(missing, { delayMs, progress, token });
+          if (result.failed === 0) {
+            vscode.window.showInformationMessage(`Restored ${result.opened} missing tab${result.opened === 1 ? '' : 's'}.`);
+          } else {
+            vscode.window.showWarningMessage(`Restored ${result.opened} of ${missing.length} (${result.failed} failed). Check the Claude Code history panel.`);
+          }
+        }
+      );
+    }),
+
     vscode.commands.registerCommand('claudeTabs.restoreSession', async (node?: SessionNode) => {
       if (!node) { return; }
       if (!(await isClaudeCodeInstalled())) {
@@ -208,7 +264,7 @@ export function activate(context: vscode.ExtensionContext) {
     if (minutes > 0 && root) {
       periodicHandle = setInterval(async () => {
         try {
-          const tabs = await captureCurrentTabs(root);
+          const tabs = await captureAllTabs(root);
           if (tabs.length === 0) { return; }
           const name = `Auto — ${new Date().toLocaleString()}`;
           await store.save(root, name, tabs, true);
@@ -231,7 +287,7 @@ export function activate(context: vscode.ExtensionContext) {
   (async () => {
     try {
       if (cfg().get<boolean>(SETTING_AUTO, true) && root) {
-        const tabs = await captureCurrentTabs(root);
+        const tabs = await captureAllTabs(root);
         if (tabs.length > 0) {
           const name = `Startup — ${new Date().toLocaleString()}`;
           await store.save(root, name, tabs, true);
@@ -242,6 +298,29 @@ export function activate(context: vscode.ExtensionContext) {
       console.error('[claude-tabs] startup snapshot failed', err);
     }
   })();
+
+  // After VSCode has finished restoring the window, compare the latest snapshot
+  // against the tabs that actually came back and offer to reopen the dropped ones.
+  if (root && cfg().get<boolean>(SETTING_CHECK_MISSING, true)) {
+    const timer = setTimeout(async () => {
+      try {
+        const latest = store.list(root)[0];
+        if (!latest) { return; }
+        const missing = missingTabs(latest, root);
+        if (missing.length === 0) { return; }
+        const pick = await vscode.window.showInformationMessage(
+          `Claude Tabs: ${missing.length} tab${missing.length === 1 ? ' is' : 's are'} not open compared to "${latest.name}".`,
+          'Restore Missing'
+        );
+        if (pick === 'Restore Missing') {
+          await vscode.commands.executeCommand('claudeTabs.restoreMissing');
+        }
+      } catch (err) {
+        console.error('[claude-tabs] missing-tab check failed', err);
+      }
+    }, 15000);
+    context.subscriptions.push({ dispose: () => clearTimeout(timer) });
+  }
 }
 
 export function deactivate(): Thenable<void> | void {
@@ -251,7 +330,7 @@ export function deactivate(): Thenable<void> | void {
   if (!vscode.workspace.getConfiguration(CONFIG_NS).get<boolean>(SETTING_AUTO, true)) { return; }
   let tabs;
   try {
-    tabs = captureCurrentTabsSync(state.root);
+    tabs = captureAllTabsSync(state.root);
   } catch (err) {
     console.error('[claude-tabs] deactivate sync capture failed', err);
     return;

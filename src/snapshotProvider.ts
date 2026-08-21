@@ -71,7 +71,8 @@ export class SnapshotProvider implements vscode.TreeDataProvider<TreeNode> {
       const snapshots = this.store.list(this.workspaceFolder);
       const actions: TreeNode[] = [
         new ActionNode('New Snapshot…', 'claudeTabs.saveSnapshot', 'add', 'Capture all currently open Claude Code tabs and save under a name you choose'),
-        new ActionNode('Quick Save', 'claudeTabs.quickSave', 'save-all', 'Save a timestamped snapshot of current tabs without prompting for a name')
+        new ActionNode('Quick Save', 'claudeTabs.quickSave', 'save-all', 'Save a timestamped snapshot of current tabs without prompting for a name'),
+        new ActionNode('Restore Missing Tabs', 'claudeTabs.restoreMissing', 'issue-reopened', 'Reopen tabs from the latest snapshot that are not currently open — nothing gets duplicated')
       ];
       return [...actions, ...snapshots.map((s) => new SnapshotNode(s))];
     }

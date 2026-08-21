@@ -2,7 +2,7 @@
   "name": "claude-tabs",
   "displayName": "Claude Tabs",
   "description": "Snapshot and restore Claude Code conversation tabs across VSCode restarts and extension updates.",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "publisher": "codenzia",
   "author": {
     "name": "Codenzia",
@@ -62,6 +62,11 @@
         "command": "claudeTabs.restoreSnapshot",
         "title": "Claude Tabs: Restore All Tabs from Snapshot",
         "icon": "$(history)"
+      },
+      {
+        "command": "claudeTabs.restoreMissing",
+        "title": "Claude Tabs: Restore Missing Tabs",
+        "icon": "$(issue-reopened)"
       },
       {
         "command": "claudeTabs.restoreSession",
@@ -125,9 +130,14 @@
           "group": "navigation@2"
         },
         {
-          "command": "claudeTabs.refresh",
+          "command": "claudeTabs.restoreMissing",
           "when": "view == claudeTabs.snapshots",
           "group": "navigation@3"
+        },
+        {
+          "command": "claudeTabs.refresh",
+          "when": "view == claudeTabs.snapshots",
+          "group": "navigation@4"
         }
       ],
       "view/item/context": [
@@ -135,6 +145,11 @@
           "command": "claudeTabs.restoreSnapshot",
           "when": "view == claudeTabs.snapshots && viewItem == snapshot",
           "group": "inline@1"
+        },
+        {
+          "command": "claudeTabs.restoreMissing",
+          "when": "view == claudeTabs.snapshots && viewItem == snapshot",
+          "group": "inline@2"
         },
         {
           "command": "claudeTabs.renameSnapshot",
@@ -173,6 +188,11 @@
           "minimum": 1,
           "description": "How many auto-snapshots to keep per workspace before pruning the oldest."
         },
+        "claudeTabs.checkMissingOnStartup": {
+          "type": "boolean",
+          "default": true,
+          "description": "After the window opens, compare the latest snapshot with the tabs that actually restored and offer to reopen any that were dropped."
+        },
         "claudeTabs.restoreDelayMs": {
           "type": "number",
           "default": 400,
@@ -191,6 +211,7 @@
     "@types/node": "^20.11.0",
     "@types/vscode": "^1.85.0",
     "@vscode/vsce": "^3.9.1",
+    "sql.js": "^1.14.2",
     "typescript": "^5.4.0"
   }
 }
