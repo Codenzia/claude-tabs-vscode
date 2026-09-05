@@ -301,13 +301,17 @@ export async function activate(context: vscode.ExtensionContext) {
 
   // After VSCode has finished restoring the window, compare the latest snapshot
   // against the tabs that actually came back and offer to reopen the dropped ones.
+  // Runs twice: VSCode restores webview tabs as placeholders and can still close
+  // one when it is hydrated later, so a second pass catches late drops.
   if (root && cfg().get<boolean>(SETTING_CHECK_MISSING, true)) {
-    const timer = setTimeout(async () => {
+    const reported = new Set<string>();
+    const check = async () => {
       try {
         const latest = store.list(root)[0];
         if (!latest) { return; }
-        const missing = missingTabs(latest, root);
+        const missing = missingTabs(latest, root).filter((t) => !reported.has(t.sessionId));
         if (missing.length === 0) { return; }
+        missing.forEach((t) => reported.add(t.sessionId));
         const pick = await vscode.window.showInformationMessage(
           `Claude Tabs: ${missing.length} tab${missing.length === 1 ? ' is' : 's are'} not open compared to "${latest.name}".`,
           'Restore Missing'
@@ -318,8 +322,9 @@ export async function activate(context: vscode.ExtensionContext) {
       } catch (err) {
         console.error('[claude-tabs] missing-tab check failed', err);
       }
-    }, 15000);
-    context.subscriptions.push({ dispose: () => clearTimeout(timer) });
+    };
+    const timers = [setTimeout(check, 15000), setTimeout(check, 120000)];
+    context.subscriptions.push({ dispose: () => timers.forEach(clearTimeout) });
   }
 }
 

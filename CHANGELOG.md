@@ -2,6 +2,11 @@
 
 All notable changes to **Claude Tabs** will be documented here.
 
+## [0.1.6] — 2026-08-26
+
+### Fixed
+- The startup missing-tab check now runs a second pass two minutes after the window opens. VSCode restores webview tabs as placeholders and can still close one when it hydrates it later, so a single early check missed those late drops. The second pass only reports tabs not already reported.
+
 ## [0.1.5] — 2026-08-21
 
 ### Added

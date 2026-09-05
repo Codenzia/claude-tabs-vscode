@@ -63,7 +63,7 @@ VSCode persists the editor layout — including every Claude webview tab and its
 | `claudeTabs.autoSnapshotOnDeactivate` | `true` | Take an auto-snapshot at startup and at window shutdown |
 | `claudeTabs.periodicSnapshotMinutes` | `15` | Auto-snapshot every N minutes; `0` to disable |
 | `claudeTabs.autoSnapshotKeep` | `10` | How many auto-snapshots to retain per workspace |
-| `claudeTabs.checkMissingOnStartup` | `true` | After the window opens, offer to reopen tabs that VSCode dropped |
+| `claudeTabs.checkMissingOnStartup` | `true` | After the window opens (checked at 15s and again at 2min), offer to reopen tabs that VSCode dropped |
 | `claudeTabs.restoreDelayMs` | `400` | Pause between reopening each tab during restore |
 
 ## Requirements
