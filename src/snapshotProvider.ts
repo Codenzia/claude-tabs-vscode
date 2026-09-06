@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { Snapshot, SnapshotStore } from './snapshotStore';
-import { CapturedTab } from './tabScanner';
+import { CapturedTab, transcriptExists } from './tabScanner';
 
 export type TreeNode = ActionNode | SnapshotNode | SessionNode;
 
@@ -20,12 +20,14 @@ export class ActionNode extends vscode.TreeItem {
 
 export class SnapshotNode extends vscode.TreeItem {
   readonly kind = 'snapshot' as const;
-  constructor(readonly snapshot: Snapshot) {
+  constructor(readonly snapshot: Snapshot, deadCount = 0) {
     super(snapshot.name, vscode.TreeItemCollapsibleState.Collapsed);
     const when = new Date(snapshot.createdAt).toLocaleString();
     const auto = snapshot.isAuto ? ' • auto' : '';
-    this.description = `${snapshot.tabs.length} tab${snapshot.tabs.length === 1 ? '' : 's'} • ${when}${auto}`;
-    this.tooltip = `${snapshot.name}\n${snapshot.workspaceFolder}\nSaved: ${when}\nTabs: ${snapshot.tabs.length}`;
+    const dead = deadCount > 0 ? ` • ${deadCount} deleted` : '';
+    this.description = `${snapshot.tabs.length} tab${snapshot.tabs.length === 1 ? '' : 's'}${dead} • ${when}${auto}`;
+    this.tooltip = `${snapshot.name}\n${snapshot.workspaceFolder}\nSaved: ${when}\nTabs: ${snapshot.tabs.length}`
+      + (deadCount > 0 ? `\nTranscript deleted (cannot be reopened): ${deadCount}` : '');
     this.iconPath = new vscode.ThemeIcon(snapshot.isAuto ? 'history' : 'bookmark');
     this.contextValue = 'snapshot';
     this.id = snapshot.id;
@@ -34,13 +36,20 @@ export class SnapshotNode extends vscode.TreeItem {
 
 export class SessionNode extends vscode.TreeItem {
   readonly kind = 'session' as const;
-  constructor(readonly snapshotId: string, readonly workspaceFolder: string, readonly tab: CapturedTab) {
+  constructor(readonly snapshotId: string, readonly workspaceFolder: string, readonly tab: CapturedTab, readonly transcriptMissing = false) {
     super(tab.title, vscode.TreeItemCollapsibleState.None);
+    this.id = `${snapshotId}::${tab.sessionId}`;
+    if (transcriptMissing) {
+      this.tooltip = `${tab.title}\nsessionId: ${tab.sessionId}\n\nTranscript deleted from ~/.claude/projects — this conversation cannot be reopened.`;
+      this.description = `${tab.sessionId.slice(0, 8)} • transcript deleted`;
+      this.iconPath = new vscode.ThemeIcon('warning', new vscode.ThemeColor('list.warningForeground'));
+      this.contextValue = 'session-missing';
+      return;
+    }
     this.tooltip = `${tab.title}\nsessionId: ${tab.sessionId}`;
     this.description = tab.sessionId.slice(0, 8);
     this.iconPath = new vscode.ThemeIcon('comment-discussion');
     this.contextValue = 'session';
-    this.id = `${snapshotId}::${tab.sessionId}`;
     this.command = {
       command: 'claudeTabs.restoreSession',
       title: 'Restore This Tab',
@@ -74,10 +83,14 @@ export class SnapshotProvider implements vscode.TreeDataProvider<TreeNode> {
         new ActionNode('Quick Save', 'claudeTabs.quickSave', 'save-all', 'Save a timestamped snapshot of current tabs without prompting for a name'),
         new ActionNode('Restore Missing Tabs', 'claudeTabs.restoreMissing', 'issue-reopened', 'Reopen tabs from the latest snapshot that are not currently open — nothing gets duplicated')
       ];
-      return [...actions, ...snapshots.map((s) => new SnapshotNode(s))];
+      return [...actions, ...snapshots.map((s) => new SnapshotNode(
+        s,
+        s.tabs.filter((t) => !transcriptExists(s.workspaceFolder, t.sessionId)).length
+      ))];
     }
     if (element.kind === 'snapshot') {
-      return element.snapshot.tabs.map((t) => new SessionNode(element.snapshot.id, element.snapshot.workspaceFolder, t));
+      const snap = element.snapshot;
+      return snap.tabs.map((t) => new SessionNode(snap.id, snap.workspaceFolder, t, !transcriptExists(snap.workspaceFolder, t.sessionId)));
     }
     return [];
   }

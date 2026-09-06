@@ -2,6 +2,11 @@
 
 All notable changes to **Claude Tabs** will be documented here.
 
+## [0.1.7] — 2026-09-06
+
+### Added
+- Sessions whose transcript no longer exists on disk (Claude Code deletes transcripts after `cleanupPeriodDays`, default 30) are marked in the tree with a warning icon and "transcript deleted"; the snapshot row shows how many. They are no longer clickable, and every restore command skips them and reports the count — reopening one only produced an empty tab.
+
 ## [0.1.6] — 2026-08-26
 
 ### Fixed

@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { CapturedTab, captureAllTabs, captureAllTabsSync, findRunningSessions } from './tabScanner';
+import { CapturedTab, captureAllTabs, captureAllTabsSync, findRunningSessions, transcriptExists } from './tabScanner';
 import { Snapshot, SnapshotStore } from './snapshotStore';
 import { SessionNode, SnapshotNode, SnapshotProvider, TreeNode } from './snapshotProvider';
 import { isClaudeCodeInstalled, restoreMany, restoreOne } from './restorer';
@@ -45,6 +45,15 @@ function openClaudeTabTitles(): Set<string> {
     }
   }
   return titles;
+}
+
+function withoutDeleted(tabs: CapturedTab[], root: string): { ok: CapturedTab[]; dead: number } {
+  const ok = tabs.filter((t) => transcriptExists(root, t.sessionId));
+  return { ok, dead: tabs.length - ok.length };
+}
+
+function deadNote(dead: number): string {
+  return dead > 0 ? ` Skipped ${dead} whose transcript${dead === 1 ? ' was' : 's were'} deleted.` : '';
 }
 
 function missingTabs(snap: Snapshot, root: string): CapturedTab[] {
@@ -142,6 +151,11 @@ export async function activate(context: vscode.ExtensionContext) {
         return;
       }
       const delayMs = cfg().get<number>(SETTING_DELAY, 400);
+      const { ok, dead } = withoutDeleted(snap.tabs, snap.workspaceFolder);
+      if (ok.length === 0) {
+        vscode.window.showWarningMessage(`Nothing to restore from "${snap.name}".${deadNote(dead)}`);
+        return;
+      }
       await vscode.window.withProgress(
         {
           location: vscode.ProgressLocation.Notification,
@@ -149,11 +163,11 @@ export async function activate(context: vscode.ExtensionContext) {
           cancellable: true
         },
         async (progress, token) => {
-          const result = await restoreMany(snap!.tabs, { delayMs, progress, token });
+          const result = await restoreMany(ok, { delayMs, progress, token });
           if (result.failed === 0) {
-            vscode.window.showInformationMessage(`Restored ${result.opened} tab${result.opened === 1 ? '' : 's'}.`);
+            vscode.window.showInformationMessage(`Restored ${result.opened} tab${result.opened === 1 ? '' : 's'}.${deadNote(dead)}`);
           } else {
-            vscode.window.showWarningMessage(`Restored ${result.opened} of ${snap!.tabs.length} (${result.failed} failed). Check the Claude Code history panel.`);
+            vscode.window.showWarningMessage(`Restored ${result.opened} of ${ok.length} (${result.failed} failed).${deadNote(dead)} Check the Claude Code history panel.`);
           }
         }
       );
@@ -171,9 +185,13 @@ export async function activate(context: vscode.ExtensionContext) {
         vscode.window.showErrorMessage('Claude Code extension is not installed. Install it to restore tabs.');
         return;
       }
-      const missing = missingTabs(snap, r);
+      const { ok: missing, dead } = withoutDeleted(missingTabs(snap, r), r);
       if (missing.length === 0) {
-        vscode.window.showInformationMessage(`All ${snap.tabs.length} tabs from "${snap.name}" are already open.`);
+        vscode.window.showInformationMessage(
+          dead > 0
+            ? `Every restorable tab from "${snap.name}" is already open.${deadNote(dead)}`
+            : `All ${snap.tabs.length} tabs from "${snap.name}" are already open.`
+        );
         return;
       }
       const delayMs = cfg().get<number>(SETTING_DELAY, 400);
@@ -186,7 +204,7 @@ export async function activate(context: vscode.ExtensionContext) {
         async (progress, token) => {
           const result = await restoreMany(missing, { delayMs, progress, token });
           if (result.failed === 0) {
-            vscode.window.showInformationMessage(`Restored ${result.opened} missing tab${result.opened === 1 ? '' : 's'}.`);
+            vscode.window.showInformationMessage(`Restored ${result.opened} missing tab${result.opened === 1 ? '' : 's'}.${deadNote(dead)}`);
           } else {
             vscode.window.showWarningMessage(`Restored ${result.opened} of ${missing.length} (${result.failed} failed). Check the Claude Code history panel.`);
           }
@@ -309,7 +327,7 @@ export async function activate(context: vscode.ExtensionContext) {
       try {
         const latest = store.list(root)[0];
         if (!latest) { return; }
-        const missing = missingTabs(latest, root).filter((t) => !reported.has(t.sessionId));
+        const missing = withoutDeleted(missingTabs(latest, root), root).ok.filter((t) => !reported.has(t.sessionId));
         if (missing.length === 0) { return; }
         missing.forEach((t) => reported.add(t.sessionId));
         const pick = await vscode.window.showInformationMessage(

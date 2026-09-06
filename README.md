@@ -19,6 +19,7 @@ Claude Tabs makes the open tab set a first-class object:
 - **Named snapshots** — Save the current tab set under any label (`"before 2.1.158 update"`, `"monday platform work"`)
 - **One-click restore** — Reopens every conversation as a proper Claude Code editor tab, not a terminal session
 - **Restore Missing Tabs** — After an update drops some of your tabs, reopen only the ones that didn't come back — no duplicates. Claude Tabs even detects the gap at startup and offers to fix it
+- **Deleted-transcript detection** — Conversations whose transcript Claude Code has already cleaned up (default: after 30 days) are flagged in the tree and skipped on restore, so you know which tabs are real before clicking. Raise `cleanupPeriodDays` in `~/.claude/settings.json` to stop losing them
 - **Auto snapshots** — At workspace startup, on a configurable interval, and at shutdown — three layers of safety
 - **Per-workspace** — Each project keeps its own snapshot list; no cross-contamination
 - **Tree view in the Activity Bar** — Browse, expand to see titled tabs inside each snapshot, right-click to restore / rename / delete

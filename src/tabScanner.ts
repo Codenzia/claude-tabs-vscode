@@ -23,6 +23,10 @@ export function projectKeyFor(workspaceDir: string): string {
   return workspaceDir.replace(/[:\\/]/g, '-');
 }
 
+export function transcriptExists(workspaceDir: string, sessionId: string): boolean {
+  return fs.existsSync(path.join(PROJECTS_ROOT, projectKeyFor(workspaceDir), `${sessionId}.jsonl`));
+}
+
 function isPidAlive(pid: number): boolean {
   try {
     process.kill(pid, 0);
