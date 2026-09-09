@@ -10,6 +10,7 @@ let deactivateState: { store: SnapshotStore; root: string } | undefined;
 const CONFIG_NS = 'claudeTabs';
 const SETTING_AUTO = 'autoSnapshotOnDeactivate';
 const SETTING_CHECK_MISSING = 'checkMissingOnStartup';
+const SETTING_AUTO_RESTORE = 'autoRestoreMissing';
 const SETTING_PERIODIC = 'periodicSnapshotMinutes';
 const SETTING_AUTO_KEEP = 'autoSnapshotKeep';
 const SETTING_DELAY = 'restoreDelayMs';
@@ -31,7 +32,7 @@ function updateViewContext(store: SnapshotStore, root: string | undefined) {
 async function captureWithFeedback(root: string): Promise<CapturedTab[]> {
   return await vscode.window.withProgress(
     { location: vscode.ProgressLocation.Notification, title: 'Claude Tabs: scanning open tabs…', cancellable: false },
-    async () => captureAllTabs(root)
+    async () => captureOpenTabs(root)
   );
 }
 
@@ -45,6 +46,38 @@ function openClaudeTabTitles(): Set<string> {
     }
   }
   return titles;
+}
+
+/**
+ * The persisted layout can lag the real tab bar by minutes, so drop captured
+ * tabs that are neither visible right now nor backed by a live CLI process.
+ * When no Claude tab is visible at all (API unavailable during shutdown) the
+ * capture is returned untouched.
+ */
+function onlyOpenNow(tabs: CapturedTab[], root: string): CapturedTab[] {
+  const titles = openClaudeTabTitles();
+  if (titles.size === 0) { return tabs; }
+  const liveIds = new Set(findRunningSessions(root).map((s) => s.sessionId));
+  return tabs.filter((t) => titles.has(t.title) || liveIds.has(t.sessionId));
+}
+
+async function captureOpenTabs(root: string): Promise<CapturedTab[]> {
+  return onlyOpenNow(await captureAllTabs(root), root);
+}
+
+function captureOpenTabsSync(root: string): CapturedTab[] {
+  return onlyOpenNow(captureAllTabsSync(root), root);
+}
+
+function unionTabs(...lists: (CapturedTab[] | undefined)[]): CapturedTab[] {
+  const seen = new Set<string>();
+  const out: CapturedTab[] = [];
+  for (const list of lists) {
+    for (const t of list ?? []) {
+      if (!seen.has(t.sessionId)) { seen.add(t.sessionId); out.push(t); }
+    }
+  }
+  return out;
 }
 
 function withoutDeleted(tabs: CapturedTab[], root: string): { ok: CapturedTab[]; dead: number } {
@@ -282,7 +315,7 @@ export async function activate(context: vscode.ExtensionContext) {
     if (minutes > 0 && root) {
       periodicHandle = setInterval(async () => {
         try {
-          const tabs = await captureAllTabs(root);
+          const tabs = await captureOpenTabs(root);
           if (tabs.length === 0) { return; }
           const name = `Auto — ${new Date().toLocaleString()}`;
           await store.save(root, name, tabs, true);
@@ -302,10 +335,15 @@ export async function activate(context: vscode.ExtensionContext) {
     { dispose: () => { if (periodicHandle) { clearInterval(periodicHandle); } } }
   );
 
+  // Newest snapshot from before this window opened (normally the Shutdown one).
+  // The Startup snapshot alone is not a safe baseline: VSCode may already have
+  // re-flushed the layout without the tabs it dropped.
+  const preStartup: Snapshot | undefined = root ? store.list(root)[0] : undefined;
+
   (async () => {
     try {
       if (cfg().get<boolean>(SETTING_AUTO, true) && root) {
-        const tabs = await captureAllTabs(root);
+        const tabs = await captureOpenTabs(root);
         if (tabs.length > 0) {
           const name = `Startup — ${new Date().toLocaleString()}`;
           await store.save(root, name, tabs, true);
@@ -317,19 +355,31 @@ export async function activate(context: vscode.ExtensionContext) {
     }
   })();
 
-  // After VSCode has finished restoring the window, compare the latest snapshot
-  // against the tabs that actually came back and offer to reopen the dropped ones.
-  // Runs twice: VSCode restores webview tabs as placeholders and can still close
-  // one when it is hydrated later, so a second pass catches late drops.
+  // After VSCode has finished restoring the window, compare the pre-startup and
+  // startup snapshots against the tabs that actually came back and reopen the
+  // dropped ones (or offer to, when auto-restore is off). Runs twice: VSCode
+  // restores webview tabs as placeholders and can still close one when it is
+  // hydrated later, so a second pass catches late drops.
   if (root && cfg().get<boolean>(SETTING_CHECK_MISSING, true)) {
     const reported = new Set<string>();
     const check = async () => {
       try {
         const latest = store.list(root)[0];
         if (!latest) { return; }
-        const missing = withoutDeleted(missingTabs(latest, root), root).ok.filter((t) => !reported.has(t.sessionId));
+        const baseline: Snapshot = { ...latest, tabs: unionTabs(preStartup?.tabs, latest.tabs) };
+        const missing = withoutDeleted(missingTabs(baseline, root), root).ok.filter((t) => !reported.has(t.sessionId));
         if (missing.length === 0) { return; }
         missing.forEach((t) => reported.add(t.sessionId));
+        if (cfg().get<boolean>(SETTING_AUTO_RESTORE, true) && (await isClaudeCodeInstalled())) {
+          const result = await restoreMany(missing, { delayMs: cfg().get<number>(SETTING_DELAY, 400) });
+          const names = missing.map((t) => t.title).join(', ');
+          if (result.failed === 0) {
+            vscode.window.showInformationMessage(`Claude Tabs: reopened ${result.opened} tab${result.opened === 1 ? '' : 's'} the window dropped — ${names}`);
+          } else {
+            vscode.window.showWarningMessage(`Claude Tabs: reopened ${result.opened} of ${missing.length} dropped tabs (${result.failed} failed). Check the Claude Code history panel.`);
+          }
+          return;
+        }
         const pick = await vscode.window.showInformationMessage(
           `Claude Tabs: ${missing.length} tab${missing.length === 1 ? ' is' : 's are'} not open compared to "${latest.name}".`,
           'Restore Missing'
@@ -353,7 +403,7 @@ export function deactivate(): Thenable<void> | void {
   if (!vscode.workspace.getConfiguration(CONFIG_NS).get<boolean>(SETTING_AUTO, true)) { return; }
   let tabs;
   try {
-    tabs = captureAllTabsSync(state.root);
+    tabs = captureOpenTabsSync(state.root);
   } catch (err) {
     console.error('[claude-tabs] deactivate sync capture failed', err);
     return;

@@ -18,7 +18,7 @@ Claude Tabs makes the open tab set a first-class object:
 
 - **Named snapshots** — Save the current tab set under any label (`"before 2.1.158 update"`, `"monday platform work"`)
 - **One-click restore** — Reopens every conversation as a proper Claude Code editor tab, not a terminal session
-- **Restore Missing Tabs** — After an update drops some of your tabs, reopen only the ones that didn't come back — no duplicates. Claude Tabs even detects the gap at startup and offers to fix it
+- **Restore Missing Tabs** — After an update drops some of your tabs, reopen only the ones that didn't come back — no duplicates. Claude Tabs detects the gap at startup and reopens them automatically (or offers a button, if you prefer)
 - **Deleted-transcript detection** — Conversations whose transcript Claude Code has already cleaned up (default: after 30 days) are flagged in the tree and skipped on restore, so you know which tabs are real before clicking. Raise `cleanupPeriodDays` in `~/.claude/settings.json` to stop losing them
 - **Auto snapshots** — At workspace startup, on a configurable interval, and at shutdown — three layers of safety
 - **Per-workspace** — Each project keeps its own snapshot list; no cross-contamination
@@ -64,7 +64,8 @@ VSCode persists the editor layout — including every Claude webview tab and its
 | `claudeTabs.autoSnapshotOnDeactivate` | `true` | Take an auto-snapshot at startup and at window shutdown |
 | `claudeTabs.periodicSnapshotMinutes` | `15` | Auto-snapshot every N minutes; `0` to disable |
 | `claudeTabs.autoSnapshotKeep` | `10` | How many auto-snapshots to retain per workspace |
-| `claudeTabs.checkMissingOnStartup` | `true` | After the window opens (checked at 15s and again at 2min), offer to reopen tabs that VSCode dropped |
+| `claudeTabs.checkMissingOnStartup` | `true` | After the window opens (checked at 15s and again at 2min), detect tabs that VSCode dropped |
+| `claudeTabs.autoRestoreMissing` | `true` | Reopen dropped tabs automatically; `false` shows a Restore Missing button instead |
 | `claudeTabs.restoreDelayMs` | `400` | Pause between reopening each tab during restore |
 
 ## Requirements

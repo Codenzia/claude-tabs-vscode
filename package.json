@@ -2,7 +2,7 @@
   "name": "claude-tabs",
   "displayName": "Claude Tabs",
   "description": "Snapshot and restore Claude Code conversation tabs across VSCode restarts and extension updates.",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "publisher": "codenzia",
   "author": {
     "name": "Codenzia",
@@ -192,6 +192,11 @@
           "type": "boolean",
           "default": true,
           "description": "After the window opens (and again two minutes later, since VSCode can drop a restored tab when it hydrates it), compare the latest snapshot with the tabs actually open and offer to reopen any that were dropped."
+        },
+        "claudeTabs.autoRestoreMissing": {
+          "type": "boolean",
+          "default": true,
+          "description": "When the startup check finds tabs the window failed to restore, reopen them automatically instead of only offering a button."
         },
         "claudeTabs.restoreDelayMs": {
           "type": "number",

@@ -2,6 +2,15 @@
 
 All notable changes to **Claude Tabs** will be documented here.
 
+## [0.1.8] — 2026-09-10
+
+### Added
+- Dropped tabs are now reopened **automatically** by the startup check (15s and 2min passes) — a notice lists which ones came back. Set `claudeTabs.autoRestoreMissing` to `false` to get the old button instead.
+
+### Fixed
+- The startup check now compares against the last snapshot taken *before* the window opened (normally the Shutdown one) merged with the Startup snapshot. The Startup snapshot alone was an unsafe baseline: VSCode can re-flush its layout without the tabs it dropped, hiding them from the diff.
+- Captures now drop tabs that are neither in the live tab bar nor backed by a running process, so a tab you closed shortly before a reload is no longer treated as "dropped" and reopened.
+
 ## [0.1.7] — 2026-09-06
 
 ### Added
